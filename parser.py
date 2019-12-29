@@ -1,6 +1,4 @@
 import glob
-import time
-from datetime import datetime
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -83,6 +81,12 @@ def show_plot(df):
 
     speed = np.linspace(0, 50, 501)
     plt.plot(speed, p(speed))
+    plt.xlabel('Speed [km/h]')
+    plt.ylabel('Power [W]')
+    plt.ylim(ymin=0)
+    plt.xlim(xmin=0)
+    plt.grid(which="both", axis='both')
+
     plt.show()
 
 
