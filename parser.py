@@ -1,3 +1,4 @@
+import glob
 import time
 from datetime import datetime
 
@@ -6,46 +7,59 @@ import numpy as np
 
 import fitdecode
 import pandas as pd
-from sklearn.linear_model import LinearRegression
 
 
-def create_df():
-    with fitdecode.FitReader("bike.fit") as fit:
+def get_files(directory='data'):
+    return glob.glob(directory + '/*.fit')
+
+
+def collect_data():
+    file_list = get_files()
+    output_df = None
+    for filename in file_list:
+        df = create_dataframe(filename)
+        if output_df is None:
+            output_df = df
+        else:
+            output_df.append(df)
+    return output_df
+
+
+def create_dataframe(filename='bike.fit'):
+    with fitdecode.FitReader(filename) as fit:
         data = []
         columns = ['timestamp', 'distance_m', "accumulated_power_w", "enhanced_speed_m_s",
                    "speed_m_s", "power_w", "heart_rate_bpm", "cadence_rpm", "temperature_c",
                    "fractional_cadence_rpm",
                    ]
+        field_map = ['timestamp', 'distance', 'accumulated_power', 'enhanced_speed',
+                     'speed', 'power', 'heart_rate', 'cadence', 'temperature', 'fractional_cadence']
 
         for frame in fit:
-            # The yielded frame object is of one of the following types:
-            # * fitdecode.FitHeader
-            # * fitdecode.FitDefinitionMessage
-            # * fitdecode.FitDataMessage
-            # * fitdecode.FitCRC
-
             if isinstance(frame, fitdecode.FitDataMessage):
-                # Here, frame is a FitDataMessage object.
-                # A FitDataMessage object contains decoded values that
-                # are directly usable in your script logic.
-
                 if frame.name == "record":
-                    row = []
+                    row = list(range(10))
 
                     for field in frame.fields:
-                        row.append(field.value)
+                        if field.name in field_map:
+                            row[field_map.index(field.name)] = field.value
+                            # row.append(field.value)
 
                     data.append(row)
-
-        dataset = pd.DataFrame(data=data, columns=columns)
-
-        return dataset
+        if len(data[-1]) == 10:
+            dataset = pd.DataFrame(data=data, columns=columns)
+            return dataset
+        else:
+            return None
 
 
 def find_velocity(average_power, df):
     df.sort_values(by=['speed_m_s'])
+
     df['speed_km_h'] = df['speed_m_s'] * (3600/1000)
-    p = np.poly1d(np.polyfit(df['power_w'], df['speed_km_h'], 3))
+    df = df[df['power_w'] > 1.0]
+
+    p = np.poly1d(np.polyfit(df['power_w'], df['speed_km_h'], 2))
     average_velocity = p(average_power)
     return average_velocity
 
@@ -63,20 +77,25 @@ def show_plot(df):
     df.sort_values(by=['speed_m_s'])
     df['speed_km_h'] = df['speed_m_s'] * (3600/1000)
 
-    p = np.poly1d(np.polyfit(df['speed_km_h'], df['power_w'], 3))
-    power = np.linspace(20, 40, 201)
-    plt.plot(power, p(power))
+    df = df[df['power_w'] > 1.0]
+
+    p = np.poly1d(np.polyfit(df['speed_km_h'], df['power_w'], 2))
+
+    speed = np.linspace(0, 50, 501)
+    plt.plot(speed, p(speed))
     plt.show()
 
 
 if __name__ == "__main__":
-    dataset = create_df()
+    df = collect_data()
+    # show_plot(df)
+
     input_power = input('Type average power: ')
     average_power = int(input_power)
 
     input_time = input('Type time of effort [hh:mm:ss]: ')
 
-    average_velocity = find_velocity(average_power, dataset)
+    average_velocity = find_velocity(average_power, df)
 
     distance = find_distance(average_velocity, input_time)
     print(f'Distance is {distance:.2f} km')
